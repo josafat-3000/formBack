@@ -13,9 +13,9 @@ app.use(cors());
 app.use(bodyParser.json({ limit: "10mb" })); // Aumentamos el límite para imágenes en base64
 
 app.post("/generate-pdf", async (req, res) => {
-    const { recipient, company, product, qty, concept, email } = req.body;
+    const { recipient, company, product, qty, observations,concept, email, firmaReceptor, firmaEmisor } = req.body;
   
-    console.log("Recibido:", { recipient, company, product, qty, concept, email });
+    console.log("Recibido:", { recipient, company, product, qty,  observations,concept, email });
   
     const doc = new PDFDocument();
     const filePath = `./acuse_${Date.now()}.pdf`;
@@ -30,17 +30,28 @@ app.post("/generate-pdf", async (req, res) => {
     doc.moveDown();
   
     // Información del documento
-    doc.fontSize(12).text(`Fecha: ${new Date().toLocaleDateString()}`);
-    doc.moveDown();
-    doc.text(`Atención a: ${recipient}`);
-    doc.text(`Empresa: ${company}`);
-    doc.moveDown();
-  
-    // Agregar la tabla
-    doc.text('Detalles del Producto:', { underline: true });
-    doc.moveDown();
-  
-    const tableTop = doc.y;
+    doc.fontSize(12).text(
+        `Fecha: ${new Date().toLocaleDateString('es-ES', { 
+          weekday: 'long', 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        })}`,
+        50, doc.y, { align: "right" } // Asegurar alineación izquierda y margen de 50px
+      );
+      
+      doc.moveDown();
+      doc.text(`Atención a: ${recipient}`, 50); // x = 50
+      doc.moveDown();
+      doc.text(`Empresa: ${company}`, 50); // x = 50
+      doc.moveDown();
+      
+      // Agregar la tabla
+      doc.text('Detalles del Producto:', 50, doc.y, { underline: true }); // x = 50
+      doc.moveDown();
+      
+      const tableTop = doc.y;
+      
   
     // Cabecera de la tabla con fondo de color
     doc.rect(50, tableTop, 500, 20).fill('#0088D2'); // Color de fondo para el encabezado
@@ -72,6 +83,15 @@ app.post("/generate-pdf", async (req, res) => {
   
       currentY += 25; // Ajustamos la posición para la siguiente fila
     });
+
+    // 📝 Observaciones
+  if (observations) {
+    doc.moveDown();
+    doc.fontSize(12).text("Observaciones:",50,doc.y ,{ underline: true });
+    doc.moveDown();
+    doc.fontSize(10).text(observations,{ align: "left" });
+    doc.moveDown();
+  }
   
     const signatureTop = doc.y + 100; // Espacio antes de la firma
   const lineWidth = 200; // Ancho de las líneas de firma
@@ -95,6 +115,32 @@ app.post("/generate-pdf", async (req, res) => {
   doc.fontSize(10).text(`${company}`, centerX - lineWidth - 50, signatureTop + 40, { width: lineWidth, align: "center" });
   doc.text("OTZUN Smart Access\n Mario A. Rico Zanabria", centerX + 50, signatureTop + 40, { width: lineWidth, align: "center" });
 
+  
+  const signatureWidth = 150; // Tamaño de la firma
+  const signatureHeight = 50; // Altura de la firma
+
+
+
+  // 📌 **Posicionar las imágenes de firma centradas sobre las líneas**
+  if (firmaReceptor) {
+    const buffer = Buffer.from(firmaReceptor.split(",")[1], "base64");
+    fs.writeFileSync("firma_receptor.png", buffer);
+
+    doc.image("firma_receptor.png", centerX - lineWidth - 50 + (lineWidth - signatureWidth) / 2, signatureTop - signatureHeight+25, {
+      width: signatureWidth,
+      height: signatureHeight,
+    });
+  }
+
+  if (firmaEmisor) {
+    const buffer = Buffer.from(firmaEmisor.split(",")[1], "base64");
+    fs.writeFileSync("firma_emisor.png", buffer);
+
+    doc.image("firma_emisor.png", centerX + 50 + (lineWidth - signatureWidth) / 2, signatureTop - signatureHeight+25, {
+      width: signatureWidth,
+      height: signatureHeight,
+    });
+  }
   doc.end();
     writeStream.on("finish", async () => {
         const transporter = nodemailer.createTransport({
